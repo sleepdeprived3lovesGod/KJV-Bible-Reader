@@ -1,3 +1,8 @@
+# This script is a Bible reader application that reads the Bible to the user and keeps track of which parts have already been read.
+# It uses a graphical user interface (GUI) built with Tkinter, and it leverages the edge_tts library for text-to-speech functionality.
+# The application allows users to navigate through the Bible, read verses, mark sections as completed, and save notes for each chapter.
+# It also provides options to create MP3 files of selected verses and reset reading history and notes.
+
 import tkinter as tk
 from tkinter import ttk
 import pandas as pd
@@ -16,6 +21,7 @@ from tkinter import filedialog
 from datetime import datetime
 from tkinter import Toplevel, Label, Button, StringVar, IntVar
 from tkinter.ttk import Progressbar
+import time
 
 class BibleApp(tk.Tk):
     def __init__(self):
@@ -27,6 +33,7 @@ class BibleApp(tk.Tk):
         self.default_voice = "en-US-SteffanNeural"
         self.default_skip_read_verses = False
         self.default_text_size = 12
+        self.default_translation = "kjv.csv"
 
         # Initialize settings
         self.config_file = "config.ini"
@@ -46,15 +53,15 @@ class BibleApp(tk.Tk):
 
         # === Navigation Controls ===
         nav_frame = tk.Frame(self)
-        nav_frame.grid(row=0, column=0, columnspan=3, pady=10)
+        nav_frame.grid(row=0, column=0, columnspan=3, pady=5)
 
-        # Create MP3 Button moved to the left of the Mark Section Completed button
-        self.create_mp3_button = ttk.Button(nav_frame, text="Create MP3", command=self.create_mp3)
+        # Create MP3 Button
+        self.create_mp3_button = ttk.Button(nav_frame, text="Create MP3", command=self.create_mp3, width=11)
         self.create_mp3_button.grid(row=0, column=0, padx=5)
 
         # Mark Section Completed Button
         self.mark_section_button = ttk.Button(nav_frame, text="Mark Section Completed",
-                                            command=self.create_mark_section_dialog)
+                                            command=self.create_mark_section_dialog, width=23)
         self.mark_section_button.grid(row=0, column=1, padx=5)
 
         # Book selection
@@ -62,7 +69,7 @@ class BibleApp(tk.Tk):
         self.book_label.grid(row=0, column=2, padx=5)
 
         self.book_var = tk.StringVar()
-        self.book_dropdown = ttk.Combobox(nav_frame, textvariable=self.book_var, state="readonly", width=20, height=15)
+        self.book_dropdown = ttk.Combobox(nav_frame, textvariable=self.book_var, state="readonly", width=16, height=30)
         self.book_dropdown['values'] = self.full_book_names
         self.book_dropdown.grid(row=0, column=3, padx=5)
         self.book_dropdown.bind('<<ComboboxSelected>>', lambda e: self.update_chapters())
@@ -73,7 +80,7 @@ class BibleApp(tk.Tk):
         self.chapter_label.grid(row=0, column=4, padx=5)
 
         self.chapter_var = tk.StringVar()
-        self.chapter_dropdown = ttk.Combobox(nav_frame, textvariable=self.chapter_var, state="readonly", width=5, height=15)
+        self.chapter_dropdown = ttk.Combobox(nav_frame, textvariable=self.chapter_var, state="readonly", width=4, height=30)
         self.chapter_dropdown.grid(row=0, column=5, padx=5)
         self.chapter_dropdown.bind('<<ComboboxSelected>>', lambda e: self.update_verses())
         self.chapter_dropdown.bind('<FocusIn>', lambda e: self.save_notes())  # Save notes when dropdown gains focus
@@ -83,20 +90,20 @@ class BibleApp(tk.Tk):
         self.verse_label.grid(row=0, column=6, padx=5)
 
         self.verse_var = tk.StringVar()
-        self.verse_dropdown = ttk.Combobox(nav_frame, textvariable=self.verse_var, state="readonly", width=5, height=15)
+        self.verse_dropdown = ttk.Combobox(nav_frame, textvariable=self.verse_var, state="readonly", width=4, height=30)
         self.verse_dropdown.grid(row=0, column=7, padx=5)
         self.verse_dropdown.bind('<<ComboboxSelected>>', self.on_verse_change)
         self.verse_dropdown.bind('<FocusIn>', lambda e: self.save_notes())  # Save notes when dropdown gains focus
 
         # Read and Pause buttons moved to the right of the Verse combo box
-        self.read_button = ttk.Button(nav_frame, text="Read", command=self.read)
+        self.read_button = ttk.Button(nav_frame, text="Read", command=self.read, width=6)
         self.read_button.grid(row=0, column=8, padx=5)
 
-        self.pause_button = ttk.Button(nav_frame, text="Pause", command=self.pause)  # Added Pause button
+        self.pause_button = ttk.Button(nav_frame, text="Pause", command=self.pause, width=7)  # Added Pause button
         self.pause_button.grid(row=0, column=9, padx=5)
 
         # Add Next Unread Button
-        self.next_unread_button = ttk.Button(nav_frame, text="Next Unread", command=self.next_unread)
+        self.next_unread_button = ttk.Button(nav_frame, text="Next Unread", command=self.next_unread, width=12)
         self.next_unread_button.grid(row=0, column=10, padx=5)
 
         # === Control Panel ===
@@ -105,48 +112,48 @@ class BibleApp(tk.Tk):
 
         # Voice selection
         self.voice_var = tk.StringVar(value=self.voice)
-        self.voice_dropdown = ttk.Combobox(control_frame, textvariable=self.voice_var, state="readonly", width=20, height=15)
+        self.voice_dropdown = ttk.Combobox(control_frame, textvariable=self.voice_var, state="readonly", width=20, height=30)
         self.voice_dropdown['values'] = self.voice_options
         self.voice_dropdown.grid(row=0, column=0, padx=5)
         self.voice_dropdown.bind('<<ComboboxSelected>>', self.update_voice)
-        self.voice_dropdown.bind('<FocusIn>', lambda e: self.save_notes())  # Save notes when dropdown gains focus
+        self.voice_dropdown.bind('<FocusIn>', lambda e: self.save_notes())
 
-        # Text size controls
+        # Text Size controls
         size_frame = tk.Frame(control_frame)
-        size_frame.grid(row=0, column=1, padx=10)
+        size_frame.grid(row=0, column=2, padx=5)
 
         self.text_size = tk.IntVar(value=self.text_size)
         ttk.Label(size_frame, text="Text Size:").grid(row=0, column=0, padx=2)
 
         # Create a style for the buttons
         style = ttk.Style()
-        style.configure('Square.TButton', padding=(5, 5))  # Adjust padding to make buttons square
+        style.configure('Square.TButton', padding=(5, 5))
 
         ttk.Button(size_frame, text="-", command=lambda: self.change_text_size(-1), style='Square.TButton', width=2).grid(row=0, column=1, padx=2)
         ttk.Button(size_frame, text="+", command=lambda: self.change_text_size(1), style='Square.TButton', width=2).grid(row=0, column=2, padx=2)
 
-        # Skip read verses checkbox
+        # Add Skip read verses checkbox
         self.skip_read_verses = tk.BooleanVar(value=self.skip_read_verses)
         self.skip_checkbox = ttk.Checkbutton(control_frame, text="Skip read verses",
-                                          variable=self.skip_read_verses)
-        self.skip_checkbox.grid(row=0, column=2, padx=10)
+                                            variable=self.skip_read_verses)
+        self.skip_checkbox.grid(row=0, column=4, padx=5)  # Changed from column=2 to column=3
 
         # Reset buttons
         reset_frame = tk.Frame(control_frame)
-        reset_frame.grid(row=0, column=3, padx=10)
+        reset_frame.grid(row=0, column=5, padx=5)  # Changed from column=3 to column=4
 
         ttk.Button(reset_frame, text="Reset Chapter History",
-                 command=self.reset_chapter_history).grid(row=0, column=0, padx=5)
-        ttk.Button(reset_frame, text="Reset Chapter Notes",
-                 command=self.reset_chapter_notes).grid(row=0, column=1, padx=5)
+                    command=self.reset_chapter_history, width=21).grid(row=0, column=0, padx=5)
+        # ttk.Button(reset_frame, text="Reset Chapter Notes",
+        #              command=self.reset_chapter_notes).grid(row=0, column=1, padx=5)
         ttk.Button(reset_frame, text="Reset Preferences",
-                 command=self.reset_preferences).grid(row=0, column=2, padx=5)
+                    command=self.reset_preferences, width=17).grid(row=0, column=1, padx=5)
         ttk.Button(reset_frame, text="Reset All",
-                 command=self.reset_all).grid(row=0, column=3, padx=5)
+                    command=self.reset_all, width=9).grid(row=0, column=2, padx=5)
 
         # === Verse Display ===
         self.verse_display = tk.Text(self, height=20, wrap=tk.WORD)
-        self.verse_display.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="nsew")
+        self.verse_display.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self.verse_display.configure(font=("TkDefaultFont", self.text_size.get()))
 
         # Add scrollbar to verse display
@@ -161,7 +168,7 @@ class BibleApp(tk.Tk):
 
         # === Notes Section ===
         notes_frame = tk.Frame(self)
-        notes_frame.grid(row=3, column=0, columnspan=3, pady=10, sticky="ew")
+        notes_frame.grid(row=3, column=0, columnspan=3, pady=5, sticky="ew")
 
         # Configure grid weights for better resizing
         notes_frame.grid_columnconfigure(0, weight=1)  # Notes label
@@ -171,17 +178,17 @@ class BibleApp(tk.Tk):
         self.notes_label = ttk.Label(notes_frame, text="Chapter\nNotes:")
         self.notes_label.grid(row=0, column=0, padx=5, sticky="e")
 
-        self.notes_text = tk.Text(notes_frame, width=80, height=4)  # Increased height to 4
+        self.notes_text = tk.Text(notes_frame, height=4)  # Increased height to 4
         self.notes_text.grid(row=0, column=1, padx=5, sticky="ew")
 
         # Add scrollbar to notes text
         notes_scroll = ttk.Scrollbar(notes_frame, command=self.notes_text.yview)  # Add scrollbar to notes text
-        notes_scroll.grid(row=0, column=2, sticky="ns")
+        notes_scroll.grid(row=0, column=2, sticky="nsw")
         self.notes_text.configure(yscrollcommand=notes_scroll.set)  # Configure the text widget to use the scrollbar
 
         # Copy Notes Button
-        self.copy_notes_button = ttk.Button(notes_frame, text="Copy Notes", command=self.copy_notes)
-        self.copy_notes_button.grid(row=0, column=3, padx=5, sticky="e")  # Justify right
+        self.copy_notes_button = ttk.Button(notes_frame, text="Copy\nNotes", command=self.copy_notes, width=8)
+        self.copy_notes_button.grid(row=0, column=3, padx=5, sticky="w")  # Justify right
 
         # Configure grid weights for better resizing
         self.grid_rowconfigure(2, weight=1)  # Verse Display
@@ -212,15 +219,28 @@ class BibleApp(tk.Tk):
                 'Voice': self.default_voice,
                 'SkipReadVerses': str(self.default_skip_read_verses),
                 'TextSize': str(self.default_text_size),
+                'Translation': self.default_translation,
             }
             with open(self.config_file, 'w') as configfile:
                 self.config.write(configfile)
         else:
             self.config.read(self.config_file)
 
+            # Ensure the 'Settings' section exists
+            if 'Settings' not in self.config:
+                self.config['Settings'] = {}
+
+            # Check if the 'Translation' key exists in the 'Settings' section
+            if 'Translation' not in self.config['Settings']:
+                # If not, add it with the default value
+                self.config['Settings']['Translation'] = self.default_translation
+                with open(self.config_file, 'w') as configfile:
+                    self.config.write(configfile)
+
         self.voice = self.config['Settings']['Voice']
         self.skip_read_verses = self.config['Settings'].getboolean('SkipReadVerses')
         self.text_size = self.config['Settings'].getint('TextSize')
+        self.current_translation = self.config['Settings']['Translation']
 
     async def get_voice_options(self):
         """Get available voices."""
@@ -229,6 +249,9 @@ class BibleApp(tk.Tk):
 
     def load_storage_files(self):
         """Initialize storage files if they don't exist."""
+        # Update read_verses_file path based on current translation
+        self.read_verses_file = f"read_verses_{self.current_translation.split('.')[0]}.csv"
+
         if not os.path.exists(self.read_verses_file):
             with open(self.read_verses_file, "w", newline='') as f:
                 writer = csv.writer(f)
@@ -236,6 +259,20 @@ class BibleApp(tk.Tk):
 
         # Clean up and convert the verses file if needed
         try:
+            # First, migrate any data from old read_verses.csv if it exists
+            old_verses_file = "read_verses.csv"
+            if os.path.exists(old_verses_file):
+                try:
+                    old_df = pd.read_csv(old_verses_file)
+                    # Migrate data to new translation-specific file
+                    if not old_df.empty:
+                        old_df.to_csv(self.read_verses_file, index=False)
+                    # Delete the old file after migration
+                    os.remove(old_verses_file)
+                    print(f"Migrated data from {old_verses_file} to {self.read_verses_file}")
+                except Exception as e:
+                    print(f"Error migrating old verses file: {e}")
+
             df = pd.read_csv(self.read_verses_file)
             cleaned_verses = []
 
@@ -301,6 +338,34 @@ class BibleApp(tk.Tk):
         self.config['Settings']['Voice'] = self.voice
         with open(self.config_file, 'w') as configfile:
             self.config.write(configfile)
+
+    def update_translation(self, event):
+        """Update the selected translation and reload Bible data."""
+        new_translation = f"{self.translation_var.get().lower()}.csv"
+        if new_translation != self.current_translation:
+            self.save_notes()  # Save current notes
+            self.current_translation = new_translation
+
+            # Update config
+            self.config['Settings']['Translation'] = self.current_translation
+            with open(self.config_file, 'w') as configfile:
+                self.config.write(configfile)
+
+            # Update read verses file path
+            old_verses_file = self.read_verses_file
+            self.read_verses_file = f"read_verses_{self.current_translation.split('.')[0]}.csv"
+
+            # Load new translation data
+            self.load_bible_data()
+            self.load_storage_files()
+
+            # Reset to Genesis 1:1
+            self.book_var.set("Genesis")
+            self.update_chapters()
+            self.chapter_var.set("1")
+            self.update_verses()
+            self.verse_var.set("1")
+            self.navigate()
 
     def on_book_change(self, event):
         """Handle book selection changes."""
@@ -418,13 +483,13 @@ class BibleApp(tk.Tk):
 
             # Get all chapters for the selected book
             chapters = sorted(self.bible_data[self.bible_data["Book Number"] == book_number]["Chapter"].unique())
-            
+
             # Update chapter dropdown
             self.chapter_dropdown['values'] = chapters
             if chapters:
                 self.chapter_var.set(str(chapters[0]))  # Set to first chapter
                 self.update_verses()  # Update verses for the selected chapter
-            
+
             self.navigate()
         except Exception as e:
             print(f"Error updating chapters: {e}")
@@ -452,7 +517,7 @@ class BibleApp(tk.Tk):
             self.verse_dropdown['values'] = verses
             if verses:
                 self.verse_var.set(str(verses[0]))  # Set to first verse
-            
+
             self.navigate()
         except Exception as e:
             print(f"Error updating verses: {e}")
@@ -543,7 +608,7 @@ class BibleApp(tk.Tk):
     def change_text_size(self, delta):
         """Change the font size of the verse display and save to config."""
         new_size = self.text_size.get() + delta
-        if 8 <= new_size <= 24:  # Limit size range
+        if 8 <= new_size <= 48:  # Increase max size to 48
             self.text_size.set(new_size)
             self.verse_display.configure(font=("TkDefaultFont", new_size))  # Update the font size
             self.config['Settings']['TextSize'] = str(new_size)
@@ -623,17 +688,13 @@ class BibleApp(tk.Tk):
         """Reset all history, notes, and settings to their defaults with confirmation."""
         confirmation = messagebox.askyesno(
             "Reset All",
-            "THIS IRREVERSIBLE ACTION WILL RESET ALL HISTORY, NOTES AND SETTINGS TO THEIR DEFAULTS.\n\nYOU CANNOT GET YOUR NOTES BACK."
+            "THIS IRREVERSIBLE ACTION WILL RESET ALL HISTORY AND SETTINGS TO THEIR DEFAULTS."
         )  # Ask for confirmation
         if confirmation:
             # Reset read verses
             self.read_verses = []
             with open(self.read_verses_file, "w") as f:
                 f.write("Verse ID\n")
-
-            # Reset notes
-            self.notes = pd.DataFrame(columns=["Book Number", "Chapter", "Notes"])
-            self.notes.to_csv(self.notes_file, index=False)
 
             # Reset settings to defaults
             self.config['Settings'] = {
@@ -764,6 +825,11 @@ class BibleApp(tk.Tk):
 
         # Update the display to show the verse as read
         self.navigate()
+
+        # Disable dropdowns
+        self.book_dropdown.config(state="disabled")
+        self.chapter_dropdown.config(state="disabled")
+        self.verse_dropdown.config(state="disabled")
 
         # Start new reading in a separate thread
         threading.Thread(target=self.speak_text, args=(text_to_speak,)).start()
@@ -988,6 +1054,9 @@ class BibleApp(tk.Tk):
             self.audio_paused = True
             self.read_button.config(state="normal")  # Re-enable the Read button
             self.next_unread_button.config(state="normal")  # Re-enable the Next Unread button
+            self.book_dropdown.config(state="readonly")  # Re-enable the Book dropdown
+            self.chapter_dropdown.config(state="readonly")  # Re-enable the Chapter dropdown
+            self.verse_dropdown.config(state="readonly")  # Re-enable the Verse dropdown
 
     def resume(self):
         """Resume paused audio playback."""
@@ -1060,31 +1129,31 @@ class BibleApp(tk.Tk):
         # Starting Verse Selection
         tk.Label(dialog, text="Starting Verse:").grid(row=0, column=0, padx=5, pady=5)  # Label for starting verse
         start_book_var = tk.StringVar()
-        start_book_dropdown = ttk.Combobox(dialog, textvariable=start_book_var, state="readonly", width=20, height=15)
+        start_book_dropdown = ttk.Combobox(dialog, textvariable=start_book_var, state="readonly", width=20, height=30)
         start_book_dropdown['values'] = self.full_book_names  # Use the same book list
         start_book_dropdown.grid(row=0, column=1, padx=5, pady=5)  # Dropdown for starting book
 
         start_chapter_var = tk.StringVar()
-        start_chapter_dropdown = ttk.Combobox(dialog, textvariable=start_chapter_var, state="readonly", width=5, height=15)
+        start_chapter_dropdown = ttk.Combobox(dialog, textvariable=start_chapter_var, state="readonly", width=5, height=30)
         start_chapter_dropdown.grid(row=0, column=2, padx=5, pady=5)  # Dropdown for starting chapter
 
         start_verse_var = tk.StringVar()
-        start_verse_dropdown = ttk.Combobox(dialog, textvariable=start_verse_var, state="readonly", width=5, height=15)
+        start_verse_dropdown = ttk.Combobox(dialog, textvariable=start_verse_var, state="readonly", width=5, height=30)
         start_verse_dropdown.grid(row=0, column=3, padx=5, pady=5)  # Dropdown for starting verse
 
         # Ending Verse Selection
         tk.Label(dialog, text="Ending Verse:").grid(row=1, column=0, padx=5, pady=5)  # Label for ending verse
         end_book_var = tk.StringVar()
-        end_book_dropdown = ttk.Combobox(dialog, textvariable=end_book_var, state="readonly", width=20, height=15)
+        end_book_dropdown = ttk.Combobox(dialog, textvariable=end_book_var, state="readonly", width=20, height=30)
         end_book_dropdown['values'] = self.full_book_names  # Use the same book list
         end_book_dropdown.grid(row=1, column=1, padx=5, pady=5)  # Dropdown for ending book
 
         end_chapter_var = tk.StringVar()
-        end_chapter_dropdown = ttk.Combobox(dialog, textvariable=end_chapter_var, state="readonly", width=5, height=15)
+        end_chapter_dropdown = ttk.Combobox(dialog, textvariable=end_chapter_var, state="readonly", width=5, height=30)
         end_chapter_dropdown.grid(row=1, column=2, padx=5, pady=5)  # Dropdown for ending chapter
 
         end_verse_var = tk.StringVar()
-        end_verse_dropdown = ttk.Combobox(dialog, textvariable=end_verse_var, state="readonly", width=5, height=15)
+        end_verse_dropdown = ttk.Combobox(dialog, textvariable=end_verse_var, state="readonly", width=5, height=30)
         end_verse_dropdown.grid(row=1, column=3, padx=5, pady=5)  # Dropdown for ending verse
 
         # Update chapter and verse dropdowns based on book selection
@@ -1213,10 +1282,10 @@ class BibleApp(tk.Tk):
             progress_dialog.geometry("300x100")
 
             progress_label = Label(progress_dialog, text="Generating MP3...")
-            progress_label.pack(pady=10)
+            progress_label.pack(pady=5)
 
             progress_bar = Progressbar(progress_dialog, mode='indeterminate')
-            progress_bar.pack(pady=10)
+            progress_bar.pack(pady=5)
             progress_bar.start()
 
             def update_progress():
@@ -1229,7 +1298,7 @@ class BibleApp(tk.Tk):
             threading.Thread(target=self.save_audio_threaded, args=(text_to_speak, filename, update_progress, progress_dialog, dialog)).start()
 
         save_button = ttk.Button(dialog, text="Save MP3", command=save_mp3)
-        save_button.grid(row=2, column=0, columnspan=4, pady=10)
+        save_button.grid(row=2, column=0, columnspan=4, pady=5)
 
         # Set default values to the current book, chapter, and verse
         start_book_dropdown.set(self.book_var.get())  # Set the current book
@@ -1351,31 +1420,31 @@ class BibleApp(tk.Tk):
         # Starting Verse Selection
         tk.Label(dialog, text="Starting Verse:").grid(row=0, column=0, padx=5, pady=5)
         start_book_var = tk.StringVar()
-        start_book_dropdown = ttk.Combobox(dialog, textvariable=start_book_var, state="readonly", width=20, height=15)
+        start_book_dropdown = ttk.Combobox(dialog, textvariable=start_book_var, state="readonly", width=20, height=30)
         start_book_dropdown['values'] = self.full_book_names
         start_book_dropdown.grid(row=0, column=1, padx=5, pady=5)
 
         start_chapter_var = tk.StringVar()
-        start_chapter_dropdown = ttk.Combobox(dialog, textvariable=start_chapter_var, state="readonly", width=5, height=15)
+        start_chapter_dropdown = ttk.Combobox(dialog, textvariable=start_chapter_var, state="readonly", width=5, height=30)
         start_chapter_dropdown.grid(row=0, column=2, padx=5, pady=5)
 
         start_verse_var = tk.StringVar()
-        start_verse_dropdown = ttk.Combobox(dialog, textvariable=start_verse_var, state="readonly", width=5, height=15)
+        start_verse_dropdown = ttk.Combobox(dialog, textvariable=start_verse_var, state="readonly", width=5, height=30)
         start_verse_dropdown.grid(row=0, column=3, padx=5, pady=5)
 
         # Ending Verse Selection
         tk.Label(dialog, text="Ending Verse:").grid(row=1, column=0, padx=5, pady=5)
         end_book_var = tk.StringVar()
-        end_book_dropdown = ttk.Combobox(dialog, textvariable=end_book_var, state="readonly", width=20, height=15)
+        end_book_dropdown = ttk.Combobox(dialog, textvariable=end_book_var, state="readonly", width=20, height=30)
         end_book_dropdown['values'] = self.full_book_names
         end_book_dropdown.grid(row=1, column=1, padx=5, pady=5)
 
         end_chapter_var = tk.StringVar()
-        end_chapter_dropdown = ttk.Combobox(dialog, textvariable=end_chapter_var, state="readonly", width=5, height=15)
+        end_chapter_dropdown = ttk.Combobox(dialog, textvariable=end_chapter_var, state="readonly", width=5, height=30)
         end_chapter_dropdown.grid(row=1, column=2, padx=5, pady=5)
 
         end_verse_var = tk.StringVar()
-        end_verse_dropdown = ttk.Combobox(dialog, textvariable=end_verse_var, state="readonly", width=5, height=15)
+        end_verse_dropdown = ttk.Combobox(dialog, textvariable=end_verse_var, state="readonly", width=5, height=30)
         end_verse_dropdown.grid(row=1, column=3, padx=5, pady=5)
 
         # Update chapter and verse dropdowns based on book selection
@@ -1498,7 +1567,7 @@ class BibleApp(tk.Tk):
 
         # Mark Section Button
         mark_button = ttk.Button(dialog, text="Mark Section", command=mark_section)
-        mark_button.grid(row=2, column=0, columnspan=4, pady=10)
+        mark_button.grid(row=2, column=0, columnspan=4, pady=5)
 
         # Set default values to the current book, chapter, and verse
         start_book_dropdown.set(self.book_var.get())
