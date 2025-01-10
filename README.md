@@ -35,6 +35,9 @@ A Bible reader application with text-to-speech functionality and read verses tra
    - Download and install Git from [Git for Windows](https://gitforwindows.org/).
    - Follow the installation instructions to ensure Git is added to your system's PATH.
 
+4. **Mac: Install Homebrew**
+  - run `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+
 ### Steps
 
 1. **Clone the Repository:**
